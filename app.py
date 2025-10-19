@@ -21,22 +21,41 @@ def split_total(total, n):
     return [round(p * factor) for p in parts]
 
 def generate_invoice_items(target_total):
+    """
+    Generate random items such that total ~ target_total (±5%)
+    """
     items_list = list(ITEMS.items())
     invoice = []
     total = 0
     tries = 0
-    while abs(total - target_total) > target_total * 0.05 and tries < 1000:
+
+    while abs(total - target_total) > target_total * 0.05 and tries < 300:
         invoice.clear()
         total = 0
-        for name, price in random.sample(items_list, random.randint(4, 8)):
-            qty = random.randint(1, 6)
+        tries += 1
+
+        # Random number of items per invoice (5 to 10)
+        num_items = random.randint(5, 10)
+        selected_items = random.sample(items_list, num_items)
+
+        for name, price in selected_items:
+            # Base quantity logic scaled by total
+            # e.g. for 1 lakh invoice, quantities will be larger than small invoices
+            max_qty = max(1, int(target_total / (price * num_items * random.uniform(1.5, 3.5))))
+            qty = random.randint(1, max_qty)
             item_total = qty * price
-            if total + item_total > target_total * 1.1:
-                continue
+
             invoice.append((name, qty, price, item_total))
             total += item_total
-        tries += 1
-    return invoice, total
+
+        # Fine-tuning adjustment
+        if total < target_total * 0.9:
+            scale_factor = target_total / max(total, 1)
+            invoice = [(n, int(q * scale_factor * 0.9), p, int(q * scale_factor * 0.9) * p) for n, q, p, _ in invoice]
+            total = sum(i[3] for i in invoice)
+
+    return invoice, int(total)
+
 
 # ---------------------------
 # 3️⃣ Streamlit UI
