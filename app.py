@@ -1,10 +1,6 @@
 import streamlit as st
-import random, os
+import random
 from datetime import datetime
-from reportlab.lib.pagesizes import A4
-from reportlab.lib import colors
-from reportlab.pdfgen import canvas
-from io import BytesIO
 
 # ---------------------------
 # 1️⃣ Store Items (Editable)
@@ -42,51 +38,11 @@ def generate_invoice_items(target_total):
         tries += 1
     return invoice, total
 
-def create_combined_pdf(invoices):
-    buffer = BytesIO()
-    c = canvas.Canvas(buffer, pagesize=A4)
-    width, height = A4
-
-    for inv_no, (items, total) in enumerate(invoices, start=1):
-        c.setFont("Helvetica-Bold", 18)
-        c.drawCentredString(width / 2, height - 30, f"STORE INVOICE #{inv_no}")
-        c.setFont("Helvetica", 12)
-        c.drawString(50, height - 60, f"Date: {datetime.now().strftime('%d-%m-%Y %H:%M:%S')}")
-        c.line(50, height - 70, width - 50, height - 70)
-
-        y = height - 100
-        c.setFont("Helvetica-Bold", 12)
-        c.drawString(50, y, "Item")
-        c.drawString(220, y, "Qty")
-        c.drawString(280, y, "Price")
-        c.drawString(360, y, "Total")
-        y -= 20
-        c.setFont("Helvetica", 11)
-
-        for name, qty, price, item_total in items:
-            c.drawString(50, y, name)
-            c.drawString(220, y, str(qty))
-            c.drawString(280, y, f"₹{price}")
-            c.drawString(360, y, f"₹{item_total}")
-            y -= 18
-            if y < 100:
-                c.showPage()
-                y = height - 100
-
-        c.setFont("Helvetica-Bold", 13)
-        c.setFillColor(colors.darkblue)
-        c.drawRightString(width - 50, y - 20, f"TOTAL: ₹{total}")
-        c.showPage()  # move to next page for next invoice
-
-    c.save()
-    buffer.seek(0)
-    return buffer
-
 # ---------------------------
 # 3️⃣ Streamlit UI
 # ---------------------------
 st.set_page_config(page_title="Smart Invoice Generator", page_icon="🧾", layout="centered")
-st.title("🧾 Smart Invoice Generator")
+st.title("🧾 Smart Invoice Generator (No PDF)")
 st.write("Automatically generate random invoices that total your daily sales!")
 
 total_sales = st.number_input("Enter Total Sales (₹):", min_value=1000, step=1000, value=150000)
@@ -98,20 +54,21 @@ if st.button("Generate Invoices"):
     st.info(f"Generating {num_invoices} invoices for ₹{total_sales:,} total sales...")
     invoice_totals = split_total(total_sales, num_invoices)
 
-    invoices = []
     total_sum = 0
-    for t in invoice_totals:
+    for i, t in enumerate(invoice_totals, start=1):
         items, real_total = generate_invoice_items(t)
         total_sum += real_total
-        invoices.append((items, real_total))
 
-    pdf_buffer = create_combined_pdf(invoices)
-    st.success(f"✅ Generated {num_invoices} invoices! Total: ₹{total_sum:,}")
+        with st.expander(f"📄 Invoice #{i}  —  Total ₹{real_total:,}"):
+            st.write(f"**Date:** {datetime.now().strftime('%d-%m-%Y %H:%M:%S')}")
+            st.table(
+                {
+                    "Item": [x[0] for x in items],
+                    "Qty": [x[1] for x in items],
+                    "Price (₹)": [x[2] for x in items],
+                    "Total (₹)": [x[3] for x in items],
+                }
+            )
 
-    st.download_button(
-        label="📥 Download All Invoices (PDF)",
-        data=pdf_buffer,
-        file_name=f"All_Invoices_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
-        mime="application/pdf"
-    )
-
+    st.success(f"✅ Generated {num_invoices} invoices successfully!")
+    st.info(f"💰 Total of all invoices: ₹{total_sum:,}")
