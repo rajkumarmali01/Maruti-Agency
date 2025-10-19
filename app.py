@@ -1,93 +1,117 @@
-import streamlit as st
-import random
+from fpdf import FPDF
 from datetime import datetime
+from io import BytesIO
+import inflect
 
-# ---------------------------
-# 1️⃣ Store Items (Editable)
-# ---------------------------
-ITEMS = {
-    "Milk": 50, "Bread": 30, "Butter": 120, "Cheese": 200, "Juice": 90,
-    "Rice": 80, "Sugar": 45, "Oil": 150, "Biscuits": 60, "Salt": 25,
-    "Pulses": 140, "Flour": 55, "Paneer": 220, "Tea": 180, "Coffee": 250,
-    "Chips": 35
-}
+# -------------------------------------------------------
+# 1️⃣ Number to Words Helper
+# -------------------------------------------------------
+def num2words(num):
+    p = inflect.engine()
+    return p.number_to_words(num, andword="").replace(",", "").title()
 
-# ---------------------------
-# 2️⃣ Helper Functions
-# ---------------------------
-def split_total(total, n):
-    parts = [random.random() for _ in range(n)]
-    factor = total / sum(parts)
-    return [round(p * factor) for p in parts]
+# -------------------------------------------------------
+# 2️⃣ Maruti Agency Bill Class
+# -------------------------------------------------------
+class MarutiBill(FPDF):
+    def __init__(self):
+        super().__init__(orientation="P", unit="mm", format="A4")
+        self.set_auto_page_break(auto=False)
+        self.set_margins(left=10, top=10, right=10)
 
-def generate_invoice_items(target_total):
-    """
-    Generate random items such that total ~ target_total (±5%)
-    """
-    items_list = list(ITEMS.items())
-    invoice = []
-    total = 0
-    tries = 0
+    # ---------- Header ----------
+    def header(self):
+        self.set_draw_color(200, 0, 0)
+        self.set_fill_color(200, 0, 0)
+        self.rect(10, 10, 190, 15, 'F')
 
-    while abs(total - target_total) > target_total * 0.05 and tries < 300:
-        invoice.clear()
+        self.set_text_color(255, 255, 255)
+        self.set_font("Helvetica", "B", 16)
+        self.cell(0, 10, "મારુતિ એજન્સી", align="C", ln=1)
+
+        self.set_text_color(0, 0, 0)
+        self.set_font("Helvetica", size=9)
+        self.set_xy(10, 26)
+        self.cell(0, 5, "શુભમ કોમ્પલેક્ષ, નેત્રંગ રોડ, રાજપારડી, જી. ભરૂચ.   M: 94291 26777", ln=1, align="C")
+        self.set_font("Helvetica", "B", 9)
+        self.cell(0, 5, "GST : 24AGVPM7286K1ZH", ln=1, align="C")
+
+    # ---------- Footer ----------
+    def footer(self):
+        self.set_y(-20)
+        self.set_font("Helvetica", size=9)
+        self.cell(0, 5, "Subject to Jhagadia Jurisdiction", ln=1, align="L")
+        self.set_font("Helvetica", "B", 10)
+        self.cell(0, 6, "વતી, મારુતિ એજન્સી", ln=1, align="R")
+
+    # ---------- Bill Drawing ----------
+    def draw_bill(self, bill_no, customer_name, items):
+        self.add_page()
+        self.set_font("Helvetica", size=11)
+
+        # Customer / Bill / Date Line
+        self.set_xy(15, 42)
+        self.cell(90, 8, f"નામ : {customer_name}")
+        self.cell(50, 8, f"બીલ નંબર : {bill_no}")
+        self.cell(40, 8, f"તારીખ : {datetime.now().strftime('%d-%m-%Y')}", ln=1)
+
+        # Table Header
+        headers = ["ITEM", "RATE", "WEIGHT NOS", "GST", "AMOUNT"]
+        col_widths = [70, 30, 30, 25, 35]
+        self.set_font("Helvetica", "B", 11)
+        self.set_fill_color(240, 240, 240)
+        y_start = 55
+        x = 15
+        for i, head in enumerate(headers):
+            self.rect(x, y_start, col_widths[i], 10)
+            self.cell(col_widths[i], 10, head, align="C", fill=True)
+            x += col_widths[i]
+        self.ln()
+
+        # Table Rows
+        self.set_font("Helvetica", size=10)
+        y = y_start + 10
         total = 0
-        tries += 1
+        for (item, rate, qty, gst, amt) in items:
+            x = 15
+            for val, w in zip([item, rate, qty, gst, amt], col_widths):
+                self.rect(x, y, w, 8)
+                self.cell(w, 8, str(val), align="C")
+                x += w
+            total += amt
+            y += 8
 
-        # Random number of items per invoice (5 to 10)
-        num_items = random.randint(5, 10)
-        selected_items = random.sample(items_list, num_items)
+        # Total Row
+        self.set_font("Helvetica", "B", 11)
+        self.rect(15, y, sum(col_widths[:-1]), 10)
+        self.cell(sum(col_widths[:-1]), 10, "TOTAL", align="R")
+        self.rect(15 + sum(col_widths[:-1]), y, col_widths[-1], 10)
+        self.cell(col_widths[-1], 10, f"₹ {total}", align="C", ln=1)
 
-        for name, price in selected_items:
-            # Base quantity logic scaled by total
-            # e.g. for 1 lakh invoice, quantities will be larger than small invoices
-            max_qty = max(1, int(target_total / (price * num_items * random.uniform(1.5, 3.5))))
-            qty = random.randint(1, max_qty)
-            item_total = qty * price
+        # Amount in Words
+        self.set_y(y + 15)
+        self.set_font("Helvetica", size=10)
+        self.cell(0, 6, f"Rs. in Words : {num2words(total)} Only", ln=1)
 
-            invoice.append((name, qty, price, item_total))
-            total += item_total
+        # Printed Timestamp
+        self.ln(4)
+        self.set_font("Helvetica", "I", 8)
+        self.cell(0, 6, f"Printed on : {datetime.now().strftime('%d-%m-%Y %H:%M')}", ln=1, align="R")
 
-        # Fine-tuning adjustment
-        if total < target_total * 0.9:
-            scale_factor = target_total / max(total, 1)
-            invoice = [(n, int(q * scale_factor * 0.9), p, int(q * scale_factor * 0.9) * p) for n, q, p, _ in invoice]
-            total = sum(i[3] for i in invoice)
+# -------------------------------------------------------
+# 3️⃣ Example – Generate One Print-Ready Bill
+# -------------------------------------------------------
+if __name__ == "__main__":
+    items = [
+        ("Rice", 80, 10, "5%", 800),
+        ("Sugar", 45, 5, "5%", 225),
+        ("Oil", 150, 2, "5%", 300),
+        ("Tea", 180, 1, "5%", 180),
+        ("Salt", 25, 4, "0%", 100)
+    ]
 
-    return invoice, int(total)
+    pdf = MarutiBill()
+    pdf.draw_bill("001", "Rajesh Patel", items)
 
-
-# ---------------------------
-# 3️⃣ Streamlit UI
-# ---------------------------
-st.set_page_config(page_title="Smart Invoice Generator", page_icon="🧾", layout="centered")
-st.title("🧾 Smart Invoice Generator (No PDF)")
-st.write("Automatically generate random invoices that total your daily sales!")
-
-total_sales = st.number_input("Enter Total Sales (₹):", min_value=1000, step=1000, value=150000)
-min_invoices = st.number_input("Minimum number of invoices:", 5, 50, 10)
-max_invoices = st.number_input("Maximum number of invoices:", 5, 50, 15)
-
-if st.button("Generate Invoices"):
-    num_invoices = random.randint(min_invoices, max_invoices)
-    st.info(f"Generating {num_invoices} invoices for ₹{total_sales:,} total sales...")
-    invoice_totals = split_total(total_sales, num_invoices)
-
-    total_sum = 0
-    for i, t in enumerate(invoice_totals, start=1):
-        items, real_total = generate_invoice_items(t)
-        total_sum += real_total
-
-        with st.expander(f"📄 Invoice #{i}  —  Total ₹{real_total:,}"):
-            st.write(f"**Date:** {datetime.now().strftime('%d-%m-%Y %H:%M:%S')}")
-            st.table(
-                {
-                    "Item": [x[0] for x in items],
-                    "Qty": [x[1] for x in items],
-                    "Price (₹)": [x[2] for x in items],
-                    "Total (₹)": [x[3] for x in items],
-                }
-            )
-
-    st.success(f"✅ Generated {num_invoices} invoices successfully!")
-    st.info(f"💰 Total of all invoices: ₹{total_sum:,}")
+    pdf.output("Maruti_Bill_Print.pdf")
+    print("✅ Print-ready Maruti Agency bill generated: Maruti_Bill_Print.pdf")
